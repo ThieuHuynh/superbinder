@@ -1,507 +1,280 @@
 // @ts-check
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures/base-fixtures');
+const { generateId, generateBinderName, TEST_USERS, TIMEOUTS } = require('./helpers/test-helpers');
+const { generateGoalText } = require('./fixtures/test-data');
 
 /**
- * Browser Automation Tests for Goals CRUD Operations
- * Tests Create, Read, Update, and Delete goals in the UI
+ * Goals CRUD Operations Tests
+ * Refactored to use Page Object Model and fixtures
  */
 
-test.describe('Goals CRUD Operations', () => {
-  // Test configuration
-  const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-  const testDisplayName = 'Goals Test User';
+test.describe('Goals - Create Operations', () => {
+  test.beforeEach(async ({ binderPage, goalsPage }) => {
+    const binderName = generateBinderName('goals-create');
+    await binderPage.createBinder(TEST_USERS.goals.displayName, binderName);
+    await goalsPage.navigateToGoals();
+  });
 
-  test.beforeEach(async ({ page }) => {
-    const testChannelName = 'goals-test-' + generateId();
+  test('should create a new goal using Add button', async ({ goalsPage }) => {
+    const goalText = generateGoalText('Add Button Goal ');
     
-    // Navigate to binder page
-    await page.goto('/binder');
-    await page.waitForLoadState('networkidle');
+    await goalsPage.addGoal(goalText, false);
     
-    // Fill in session setup form
-    const displayNameInput = page.locator('input[placeholder*="name" i]').first();
-    const binderNameInput = page.locator('input[placeholder*="Binder" i]').first();
+    expect(await goalsPage.goalExists(goalText)).toBe(true);
+  });
+
+  test('should create a new goal using Enter key', async ({ goalsPage }) => {
+    const goalText = generateGoalText('Enter Key Goal ');
     
-    if (await displayNameInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await displayNameInput.fill(testDisplayName);
+    await goalsPage.addGoal(goalText, true);
+    
+    expect(await goalsPage.goalExists(goalText)).toBe(true);
+  });
+
+  test('should clear input after adding goal', async ({ goalsPage }) => {
+    const goalText = generateGoalText('Clear Input Goal ');
+    
+    await goalsPage.addGoal(goalText, true);
+    
+    const inputValue = await goalsPage.getInputValue();
+    expect(inputValue).toBe('');
+  });
+
+  test('should not create goal with empty input', async ({ goalsPage }) => {
+    const success = await goalsPage.addGoal('', false);
+    
+    // Empty state should still be visible or no goals were added
+    const isEmpty = await goalsPage.isEmptyStateVisible();
+    const goalCount = await goalsPage.getGoalCount();
+    
+    expect(isEmpty || goalCount === 0).toBe(true);
+  });
+
+  test('should create multiple goals', async ({ goalsPage }) => {
+    const goals = [
+      generateGoalText('First Goal '),
+      generateGoalText('Second Goal '),
+      generateGoalText('Third Goal ')
+    ];
+    
+    const successCount = await goalsPage.addMultipleGoals(goals, true);
+    
+    expect(successCount).toBe(goals.length);
+    
+    // Verify all goals exist
+    for (const goal of goals) {
+      expect(await goalsPage.goalExists(goal)).toBe(true);
     }
-    
-    if (await binderNameInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await binderNameInput.fill(testChannelName);
-    }
-    
-    // Click join button
-    const joinButton = page.locator('button:has-text("Join")').first();
-    if (await joinButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await joinButton.click();
-      await page.waitForTimeout(2000);
-    }
-    
-    // Navigate to Goals tab
-    const goalsTab = page.locator('button:has-text("Goals")').first();
-    if (await goalsTab.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await goalsTab.click();
-      await page.waitForTimeout(500);
-    }
-  });
-
-  test.describe('Create Goal', () => {
-    test('should create a new goal using Add button', async ({ page }) => {
-      const goalText = 'Test Goal ' + generateId();
-      
-      // Find the goal input field
-      const goalInput = page.locator('input[placeholder*="Add a new goal" i]').first();
-      
-      if (await goalInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await goalInput.fill(goalText);
-        
-        // Click Add button
-        const addButton = page.locator('button:has-text("Add")').first();
-        if (await addButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-          await addButton.click();
-          await page.waitForTimeout(500);
-          
-          // Verify goal was created
-          const newGoal = page.locator(`text="${goalText}"`).first();
-          const isVisible = await newGoal.isVisible({ timeout: 5000 }).catch(() => false);
-          expect(isVisible).toBe(true);
-        }
-      }
-    });
-
-    test('should create a new goal using Enter key', async ({ page }) => {
-      const goalText = 'Enter Key Goal ' + generateId();
-      
-      // Find the goal input field
-      const goalInput = page.locator('input[placeholder*="Add a new goal" i]').first();
-      
-      if (await goalInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await goalInput.fill(goalText);
-        await goalInput.press('Enter');
-        await page.waitForTimeout(500);
-        
-        // Verify goal was created
-        const newGoal = page.locator(`text="${goalText}"`).first();
-        const isVisible = await newGoal.isVisible({ timeout: 5000 }).catch(() => false);
-        expect(isVisible).toBe(true);
-      }
-    });
-
-    test('should clear input after adding goal', async ({ page }) => {
-      const goalText = 'Clear Input Goal ' + generateId();
-      
-      const goalInput = page.locator('input[placeholder*="Add a new goal" i]').first();
-      
-      if (await goalInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await goalInput.fill(goalText);
-        await goalInput.press('Enter');
-        await page.waitForTimeout(500);
-        
-        // Verify input was cleared
-        const inputValue = await goalInput.inputValue();
-        expect(inputValue).toBe('');
-      }
-    });
-
-    test('should not create goal with empty input', async ({ page }) => {
-      const goalInput = page.locator('input[placeholder*="Add a new goal" i]').first();
-      
-      if (await goalInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        // Try to add empty goal
-        await goalInput.fill('');
-        
-        const addButton = page.locator('button:has-text("Add")').first();
-        if (await addButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-          await addButton.click();
-          await page.waitForTimeout(500);
-          
-          // Verify "No goals yet" message is still visible or no goals were added
-          const emptyMessage = page.locator('text="No goals yet."').first();
-          const goalItems = page.locator('.bg-gray-700.rounded-lg.flex.items-center');
-          
-          const isEmpty = await emptyMessage.isVisible({ timeout: 2000 }).catch(() => false);
-          const goalCount = await goalItems.count();
-          
-          // Either empty message is shown or no goals were added
-          expect(isEmpty || goalCount === 0).toBe(true);
-        }
-      }
-    });
-
-    test('should create multiple goals', async ({ page }) => {
-      const goals = [
-        'First Goal ' + generateId(),
-        'Second Goal ' + generateId(),
-        'Third Goal ' + generateId()
-      ];
-      
-      const goalInput = page.locator('input[placeholder*="Add a new goal" i]').first();
-      
-      if (await goalInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        for (const goal of goals) {
-          await goalInput.fill(goal);
-          await goalInput.press('Enter');
-          await page.waitForTimeout(400);
-        }
-        
-        // Verify all goals were created
-        for (const goal of goals) {
-          const goalElement = page.locator(`text="${goal}"`).first();
-          const isVisible = await goalElement.isVisible({ timeout: 3000 }).catch(() => false);
-          expect(isVisible).toBe(true);
-        }
-      }
-    });
-  });
-
-  test.describe('Read Goals', () => {
-    test('should display empty state when no goals exist', async ({ page }) => {
-      // Look for empty state message
-      const emptyMessage = page.locator('text="No goals yet."').first();
-      const isVisible = await emptyMessage.isVisible({ timeout: 5000 }).catch(() => false);
-      
-      // Empty state should be visible in a fresh binder
-      expect(isVisible).toBe(true);
-    });
-
-    test('should display goal with correct text', async ({ page }) => {
-      const goalText = 'Readable Goal ' + generateId();
-      
-      const goalInput = page.locator('input[placeholder*="Add a new goal" i]').first();
-      
-      if (await goalInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await goalInput.fill(goalText);
-        await goalInput.press('Enter');
-        await page.waitForTimeout(500);
-        
-        // Find the goal by text content
-        const goalElement = page.locator(`[contenteditable="true"]:has-text("${goalText}")`).first();
-        const isVisible = await goalElement.isVisible({ timeout: 5000 }).catch(() => false);
-        expect(isVisible).toBe(true);
-      }
-    });
-
-    test('should display drag handle for goals', async ({ page }) => {
-      const goalText = 'Draggable Goal ' + generateId();
-      
-      const goalInput = page.locator('input[placeholder*="Add a new goal" i]').first();
-      
-      if (await goalInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await goalInput.fill(goalText);
-        await goalInput.press('Enter');
-        await page.waitForTimeout(500);
-        
-        // Look for drag handle (⋮⋮)
-        const dragHandle = page.locator('text="⋮⋮"').first();
-        const isVisible = await dragHandle.isVisible({ timeout: 3000 }).catch(() => false);
-        expect(isVisible).toBe(true);
-      }
-    });
-
-    test('should display delete button for goals', async ({ page }) => {
-      const goalText = 'Goal With Delete ' + generateId();
-      
-      const goalInput = page.locator('input[placeholder*="Add a new goal" i]').first();
-      
-      if (await goalInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await goalInput.fill(goalText);
-        await goalInput.press('Enter');
-        await page.waitForTimeout(500);
-        
-        // Look for delete button (pi-times icon)
-        const deleteButton = page.locator('button:has(.pi-times)').first();
-        const isVisible = await deleteButton.isVisible({ timeout: 3000 }).catch(() => false);
-        expect(isVisible).toBe(true);
-      }
-    });
-  });
-
-  test.describe('Update Goal', () => {
-    test('should edit goal text inline', async ({ page }) => {
-      const originalText = 'Original Goal ' + generateId();
-      
-      // Create a goal first
-      const goalInput = page.locator('input[placeholder*="Add a new goal" i]').first();
-      
-      if (await goalInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await goalInput.fill(originalText);
-        await goalInput.press('Enter');
-        await page.waitForTimeout(500);
-        
-        // Find the contenteditable element
-        const goalElement = page.locator(`[contenteditable="true"]:has-text("${originalText}")`).first();
-        
-        if (await goalElement.isVisible({ timeout: 3000 }).catch(() => false)) {
-          // Click to focus and verify it's editable
-          await goalElement.click();
-          await page.waitForTimeout(200);
-          
-          // Verify the element is focused (can receive input)
-          const isFocused = await goalElement.evaluate(el => document.activeElement === el);
-          expect(isFocused).toBe(true);
-          
-          // Type some additional text (append to existing)
-          await page.keyboard.type(' edited');
-          await page.waitForTimeout(300);
-          
-          // Blur by clicking elsewhere
-          await goalInput.click();
-          await page.waitForTimeout(500);
-          
-          // Verify a goal container still exists (editing didn't break anything)
-          const goalContainer = page.locator('.bg-gray-700.rounded-lg.flex.items-center').first();
-          const exists = await goalContainer.isVisible({ timeout: 3000 }).catch(() => false);
-          expect(exists).toBe(true);
-        }
-      }
-    });
-
-    test('should highlight goal when editing', async ({ page }) => {
-      const goalText = 'Highlight Goal ' + generateId();
-      
-      const goalInput = page.locator('input[placeholder*="Add a new goal" i]').first();
-      
-      if (await goalInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await goalInput.fill(goalText);
-        await goalInput.press('Enter');
-        await page.waitForTimeout(500);
-        
-        // Find and click the goal to edit
-        const goalElement = page.locator(`[contenteditable="true"]:has-text("${goalText}")`).first();
-        
-        if (await goalElement.isVisible({ timeout: 3000 }).catch(() => false)) {
-          await goalElement.click();
-          await page.waitForTimeout(200);
-          
-          // Verify it has focus state (bg-gray-600 class when editing)
-          const classes = await goalElement.getAttribute('class');
-          // The element should have some form of highlight/focus indication
-          expect(classes).toBeDefined();
-        }
-      }
-    });
-  });
-
-  test.describe('Delete Goal', () => {
-    test('should delete a goal', async ({ page }) => {
-      const goalText = 'Goal To Delete ' + generateId();
-      
-      const goalInput = page.locator('input[placeholder*="Add a new goal" i]').first();
-      
-      if (await goalInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await goalInput.fill(goalText);
-        await goalInput.press('Enter');
-        await page.waitForTimeout(500);
-        
-        // Find the goal's delete button
-        const goalContainer = page.locator(`.bg-gray-700.rounded-lg:has-text("${goalText}")`).first();
-        
-        if (await goalContainer.isVisible({ timeout: 3000 }).catch(() => false)) {
-          const deleteButton = goalContainer.locator('button:has(.pi-times)').first();
-          
-          if (await deleteButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-            await deleteButton.click();
-            await page.waitForTimeout(500);
-            
-            // Verify goal was deleted
-            const deletedGoal = page.locator(`text="${goalText}"`).first();
-            const isDeleted = !(await deletedGoal.isVisible({ timeout: 2000 }).catch(() => false));
-            expect(isDeleted).toBe(true);
-          }
-        }
-      }
-    });
-
-    test('should show empty state after deleting last goal', async ({ page }) => {
-      const goalText = 'Last Goal ' + generateId();
-      
-      const goalInput = page.locator('input[placeholder*="Add a new goal" i]').first();
-      
-      if (await goalInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await goalInput.fill(goalText);
-        await goalInput.press('Enter');
-        await page.waitForTimeout(500);
-        
-        // Delete the goal
-        const goalContainer = page.locator(`.bg-gray-700.rounded-lg:has-text("${goalText}")`).first();
-        
-        if (await goalContainer.isVisible({ timeout: 3000 }).catch(() => false)) {
-          const deleteButton = goalContainer.locator('button:has(.pi-times)').first();
-          
-          if (await deleteButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-            await deleteButton.click();
-            await page.waitForTimeout(500);
-            
-            // Verify empty state is shown
-            const emptyMessage = page.locator('text="No goals yet."').first();
-            const isEmpty = await emptyMessage.isVisible({ timeout: 3000 }).catch(() => false);
-            expect(isEmpty).toBe(true);
-          }
-        }
-      }
-    });
-
-    test('should delete goal when editing to empty text', async ({ page }) => {
-      const goalText = 'Goal To Empty ' + generateId();
-      
-      const goalInput = page.locator('input[placeholder*="Add a new goal" i]').first();
-      
-      if (await goalInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await goalInput.fill(goalText);
-        await goalInput.press('Enter');
-        await page.waitForTimeout(500);
-        
-        // Find and edit the goal to empty
-        const goalElement = page.locator(`[contenteditable="true"]:has-text("${goalText}")`).first();
-        
-        if (await goalElement.isVisible({ timeout: 3000 }).catch(() => false)) {
-          await goalElement.click();
-          await page.waitForTimeout(200);
-          
-          // Select all and delete
-          await page.keyboard.press('Control+a');
-          await page.keyboard.press('Backspace');
-          
-          // Blur by clicking elsewhere (the input field)
-          await goalInput.click();
-          await page.waitForTimeout(500);
-          
-          // Verify goal was removed (empty text triggers removal per useGoals logic)
-          const emptyMessage = page.locator('text="No goals yet."').first();
-          const isEmpty = await emptyMessage.isVisible({ timeout: 3000 }).catch(() => false);
-          expect(isEmpty).toBe(true);
-        }
-      }
-    });
-  });
-
-  test.describe('Goal Interactions', () => {
-    test('should show correct goal count in tab', async ({ page }) => {
-      const goals = ['Goal 1 ' + generateId(), 'Goal 2 ' + generateId()];
-      
-      const goalInput = page.locator('input[placeholder*="Add a new goal" i]').first();
-      
-      if (await goalInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        for (const goal of goals) {
-          await goalInput.fill(goal);
-          await goalInput.press('Enter');
-          await page.waitForTimeout(400);
-        }
-        
-        // Check tab label shows count
-        const goalsTab = page.locator('button:has-text("Goals (2)")').first();
-        const hasCount = await goalsTab.isVisible({ timeout: 3000 }).catch(() => false);
-        
-        // Count may or may not be visible depending on UI, but tab should exist
-        const goalsTabAny = page.locator('button:has-text("Goals")').first();
-        const tabExists = await goalsTabAny.isVisible({ timeout: 3000 }).catch(() => false);
-        expect(tabExists).toBe(true);
-      }
-    });
-
-    test('should have cursor-move style for draggable goals', async ({ page }) => {
-      const goalText = 'Cursor Goal ' + generateId();
-      
-      const goalInput = page.locator('input[placeholder*="Add a new goal" i]').first();
-      
-      if (await goalInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await goalInput.fill(goalText);
-        await goalInput.press('Enter');
-        await page.waitForTimeout(500);
-        
-        // Find goal container and check for cursor-move class
-        const goalContainer = page.locator(`.cursor-move:has-text("${goalText}")`).first();
-        const hasCursorMove = await goalContainer.isVisible({ timeout: 3000 }).catch(() => false);
-        expect(hasCursorMove).toBe(true);
-      }
-    });
   });
 });
 
-test.describe('Goals Dashboard Integration', () => {
-  const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-
-  test('should show goals count on dashboard', async ({ page }) => {
-    const testChannelName = 'goals-dashboard-' + generateId();
-    
-    await page.goto('/binder');
-    await page.waitForLoadState('networkidle');
-    
-    const displayNameInput = page.locator('input[placeholder*="name" i]').first();
-    const binderNameInput = page.locator('input[placeholder*="Binder" i]').first();
-    
-    if (await displayNameInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await displayNameInput.fill('Dashboard Goals User');
-    }
-    if (await binderNameInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await binderNameInput.fill(testChannelName);
-    }
-    
-    const joinButton = page.locator('button:has-text("Join")').first();
-    if (await joinButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await joinButton.click();
-      await page.waitForTimeout(2000);
-    }
-    
-    // Navigate to Goals tab and add a goal
-    const goalsTab = page.locator('button:has-text("Goals")').first();
-    if (await goalsTab.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await goalsTab.click();
-      await page.waitForTimeout(500);
-      
-      const goalInput = page.locator('input[placeholder*="Add a new goal" i]').first();
-      if (await goalInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await goalInput.fill('Dashboard Goal');
-        await goalInput.press('Enter');
-        await page.waitForTimeout(500);
-      }
-    }
-    
-    // Navigate back to Dashboard
-    const dashboardTab = page.locator('button:has-text("Dashboard")').first();
-    if (await dashboardTab.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await dashboardTab.click();
-      await page.waitForTimeout(500);
-      
-      // Find goals card with count
-      const goalsCard = page.locator('text="Goals"').first();
-      const isCardVisible = await goalsCard.isVisible({ timeout: 3000 }).catch(() => false);
-      expect(isCardVisible).toBe(true);
-    }
+test.describe('Goals - Read Operations', () => {
+  test.beforeEach(async ({ binderPage, goalsPage }) => {
+    const binderName = generateBinderName('goals-read');
+    await binderPage.createBinder(TEST_USERS.goals.displayName, binderName);
+    await goalsPage.navigateToGoals();
   });
 
-  test('should navigate to Goals tab when clicking Goals card', async ({ page }) => {
-    const testChannelName = 'goals-card-nav-' + generateId();
+  test('should display empty state when no goals exist', async ({ goalsPage }) => {
+    expect(await goalsPage.isEmptyStateVisible()).toBe(true);
+  });
+
+  test('should display goal with correct text', async ({ goalsPage }) => {
+    const goalText = generateGoalText('Readable Goal ');
     
-    await page.goto('/binder');
-    await page.waitForLoadState('networkidle');
+    await goalsPage.addGoal(goalText, true);
     
-    const displayNameInput = page.locator('input[placeholder*="name" i]').first();
-    const binderNameInput = page.locator('input[placeholder*="Binder" i]').first();
+    expect(await goalsPage.goalExists(goalText)).toBe(true);
+  });
+
+  test('should display drag handle for goals', async ({ goalsPage }) => {
+    const goalText = generateGoalText('Draggable Goal ');
     
-    if (await displayNameInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await displayNameInput.fill('Card Nav User');
-    }
-    if (await binderNameInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await binderNameInput.fill(testChannelName);
-    }
+    await goalsPage.addGoal(goalText, true);
     
-    const joinButton = page.locator('button:has-text("Join")').first();
-    if (await joinButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await joinButton.click();
-      await page.waitForTimeout(2000);
-    }
+    expect(await goalsPage.hasDragHandle()).toBe(true);
+  });
+
+  test('should display delete button for goals', async ({ goalsPage }) => {
+    const goalText = generateGoalText('Goal With Delete ');
+    
+    await goalsPage.addGoal(goalText, true);
+    
+    expect(await goalsPage.hasDeleteButton()).toBe(true);
+  });
+
+  test('should show correct goal count', async ({ goalsPage }) => {
+    const goals = [
+      generateGoalText('Goal 1 '),
+      generateGoalText('Goal 2 ')
+    ];
+    
+    await goalsPage.addMultipleGoals(goals, true);
+    
+    const count = await goalsPage.getGoalCount();
+    expect(count).toBe(goals.length);
+  });
+});
+
+test.describe('Goals - Update Operations', () => {
+  test.beforeEach(async ({ binderPage, goalsPage }) => {
+    const binderName = generateBinderName('goals-update');
+    await binderPage.createBinder(TEST_USERS.goals.displayName, binderName);
+    await goalsPage.navigateToGoals();
+  });
+
+  test('should edit goal text inline', async ({ goalsPage, page }) => {
+    const originalText = generateGoalText('Original Goal ');
+    const editedText = ' edited';
+    
+    await goalsPage.addGoal(originalText, true);
+    
+    // Click to focus and type additional text
+    const goalElement = page.locator(`[contenteditable="true"]:has-text("${originalText}")`).first();
+    await goalElement.click();
+    await page.waitForTimeout(TIMEOUTS.SHORT);
+    
+    // Verify it's focused
+    const isFocused = await goalElement.evaluate(el => document.activeElement === el);
+    expect(isFocused).toBe(true);
+    
+    // Type additional text
+    await page.keyboard.type(editedText);
+    await page.waitForTimeout(TIMEOUTS.SHORT);
+    
+    // Blur by clicking input
+    const input = page.locator('input[placeholder*="Add a new goal" i]').first();
+    await input.click();
+    await page.waitForTimeout(TIMEOUTS.MEDIUM);
+    
+    // Verify goal container still exists
+    const goalCount = await goalsPage.getGoalCount();
+    expect(goalCount).toBeGreaterThan(0);
+  });
+
+  test('should highlight goal when editing', async ({ goalsPage, page }) => {
+    const goalText = generateGoalText('Highlight Goal ');
+    
+    await goalsPage.addGoal(goalText, true);
+    
+    // Click the goal to edit
+    const goalElement = page.locator(`[contenteditable="true"]:has-text("${goalText}")`).first();
+    await goalElement.click();
+    await page.waitForTimeout(TIMEOUTS.SHORT);
+    
+    // Verify it has classes (focus state)
+    const classes = await goalElement.getAttribute('class');
+    expect(classes).toBeDefined();
+  });
+});
+
+test.describe('Goals - Delete Operations', () => {
+  test.beforeEach(async ({ binderPage, goalsPage }) => {
+    const binderName = generateBinderName('goals-delete');
+    await binderPage.createBinder(TEST_USERS.goals.displayName, binderName);
+    await goalsPage.navigateToGoals();
+  });
+
+  test('should delete a goal', async ({ goalsPage }) => {
+    const goalText = generateGoalText('Goal To Delete ');
+    
+    await goalsPage.addGoal(goalText, true);
+    expect(await goalsPage.goalExists(goalText)).toBe(true);
+    
+    await goalsPage.deleteGoal(goalText);
+    
+    expect(await goalsPage.goalExists(goalText)).toBe(false);
+  });
+
+  test('should show empty state after deleting last goal', async ({ goalsPage }) => {
+    const goalText = generateGoalText('Last Goal ');
+    
+    await goalsPage.addGoal(goalText, true);
+    await goalsPage.deleteGoal(goalText);
+    
+    expect(await goalsPage.isEmptyStateVisible()).toBe(true);
+  });
+
+  test('should delete goal when editing to empty text', async ({ goalsPage }) => {
+    const goalText = generateGoalText('Goal To Empty ');
+    
+    await goalsPage.addGoal(goalText, true);
+    await goalsPage.clearGoal(goalText);
+    
+    expect(await goalsPage.isEmptyStateVisible()).toBe(true);
+  });
+
+  test('should delete multiple goals', async ({ goalsPage }) => {
+    const goals = [
+      generateGoalText('Delete 1 '),
+      generateGoalText('Delete 2 '),
+      generateGoalText('Delete 3 ')
+    ];
+    
+    await goalsPage.addMultipleGoals(goals, true);
+    
+    // Delete first two goals
+    await goalsPage.deleteGoal(goals[0]);
+    await goalsPage.deleteGoal(goals[1]);
+    
+    // Verify only one goal remains
+    const count = await goalsPage.getGoalCount();
+    expect(count).toBe(1);
+    expect(await goalsPage.goalExists(goals[2])).toBe(true);
+  });
+});
+
+test.describe('Goals - UI Interactions', () => {
+  test.beforeEach(async ({ binderPage, goalsPage }) => {
+    const binderName = generateBinderName('goals-ui');
+    await binderPage.createBinder(TEST_USERS.goals.displayName, binderName);
+    await goalsPage.navigateToGoals();
+  });
+
+  test('should show Goals tab', async ({ goalsPage, page }) => {
+    const goalsTab = page.locator('button:has-text("Goals")').first();
+    expect(await goalsTab.isVisible({ timeout: 3000 })).toBe(true);
+  });
+
+  test('should have cursor-move style for draggable goals', async ({ goalsPage }) => {
+    const goalText = generateGoalText('Cursor Goal ');
+    
+    await goalsPage.addGoal(goalText, true);
+    
+    expect(await goalsPage.hasCursorMoveStyle(goalText)).toBe(true);
+  });
+});
+
+test.describe('Goals - Dashboard Integration', () => {
+  test('should show goals count on dashboard', async ({ binderPage, goalsPage, page }) => {
+    const binderName = generateBinderName('goals-dashboard');
+    await binderPage.createBinder('Dashboard Goals User', binderName);
+    
+    // Navigate to Goals and add a goal
+    await goalsPage.navigateToGoals();
+    await goalsPage.addGoal('Dashboard Goal', true);
+    
+    // Navigate back to Dashboard
+    await binderPage.navigateToTab('Dashboard');
+    await page.waitForTimeout(TIMEOUTS.MEDIUM);
+    
+    // Find goals card
+    const goalsCard = page.locator('text="Goals"').first();
+    expect(await goalsCard.isVisible({ timeout: 3000 })).toBe(true);
+  });
+
+  test('should navigate to Goals tab when clicking Goals card', async ({ binderPage, goalsPage, page }) => {
+    const binderName = generateBinderName('goals-card-nav');
+    await binderPage.createBinder('Card Nav User', binderName);
     
     // Click on Goals card in dashboard
     const goalsCard = page.locator('.cursor-pointer:has-text("Goals")').first();
     if (await goalsCard.isVisible({ timeout: 3000 }).catch(() => false)) {
       await goalsCard.click();
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(TIMEOUTS.MEDIUM);
       
       // Verify Goals tab is now active
-      const goalsTab = page.locator('button:has-text("Goals")').first();
-      const tabClasses = await goalsTab.getAttribute('class');
-      expect(tabClasses).toContain('bg-[#3b82f6]');
+      expect(await binderPage.isTabActive('Goals')).toBe(true);
     }
   });
 });
