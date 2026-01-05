@@ -3,6 +3,9 @@
 /build
 /src
 .env
+/coverage
+/playwright-report
+/test-results
 
 /uploads/*
 !/uploads/placeholder.txt
@@ -12,3 +15,4 @@
 
 /files/*
 !/files/placeholder.txt
+/.cursor

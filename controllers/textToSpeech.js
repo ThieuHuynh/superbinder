@@ -1,24 +1,60 @@
 const { ElevenLabsClient } = require("elevenlabs");
 
-const client = new ElevenLabsClient({ apiKey: process.env.ELEVENLABS_API_KEY });
+/**
+ * Create ElevenLabs client only if API key is available
+ * @returns {ElevenLabsClient|null}
+ */
+const createClient = () => {
+  if (!process.env.ELEVENLABS_API_KEY) {
+    return null;
+  }
+  try {
+    return new ElevenLabsClient({ apiKey: process.env.ELEVENLABS_API_KEY });
+  } catch (error) {
+    console.error('Failed to create ElevenLabs client:', error.message);
+    return null;
+  }
+};
 
+const voices = async (req, res) => {
+  try {
+    if (!process.env.ELEVENLABS_API_KEY) {
+      return res.status(200).json({
+        message: 'ElevenLabs API key not configured',
+        voices: [],
+      });
+    }
 
-const voices = async (req, res) =>{
+    const client = createClient();
+    if (!client) {
+      return res.status(200).json({
+        message: 'ElevenLabs client unavailable',
+        voices: [],
+      });
+    }
 
+    const voiceSearch = await client.voices.search({
+      include_total_count: true,
+    });
 
-const client = new ElevenLabsClient({ apiKey: process.env.ELEVENLABS_API_KEY });
-let voiceSearch = await client.voices.search({
-    include_total_count: true
-});
-
-
-res.status(200).json({
-  message: 'Voices Loaded Successfully',
-  voices:voiceSearch.voices.map((voice)=>{return {voice_id:voice.voice_id, name:voice.name, labels: voice.labels}}),
-});
-
-
-}
+    res.status(200).json({
+      message: 'Voices Loaded Successfully',
+      voices: voiceSearch.voices.map((voice) => ({
+        voice_id: voice.voice_id,
+        name: voice.name,
+        labels: voice.labels,
+      })),
+    });
+  } catch (error) {
+    console.error('ElevenLabs voices error:', error.message);
+    // Return empty voices instead of crashing
+    res.status(200).json({
+      message: 'Failed to load voices',
+      voices: [],
+      error: error.message,
+    });
+  }
+};
 
 const generateAudio = async (req, res) => {
   if (req.method !== 'POST') {
@@ -32,7 +68,12 @@ const generateAudio = async (req, res) => {
     }
 
     if (!process.env.ELEVENLABS_API_KEY) {
-      return res.status(401).json({ message: "API key not configured" });
+      return res.status(503).json({ message: "ElevenLabs API key not configured" });
+    }
+
+    const client = createClient();
+    if (!client) {
+      return res.status(503).json({ message: "ElevenLabs client unavailable" });
     }
 
     const stream = await client.textToSpeech.convertAsStream(
@@ -40,7 +81,7 @@ const generateAudio = async (req, res) => {
       {
         output_format: "mp3_44100_128",
         text,
-        model_id: "eleven_flash_v2_5" //eleven_multilingual_v2
+        model_id: "eleven_flash_v2_5", //eleven_multilingual_v2
       }
     );
 
@@ -54,7 +95,9 @@ const generateAudio = async (req, res) => {
 
     stream.on('error', (err) => {
       console.error('Stream Error:', err);
-      res.status(500).end();
+      if (!res.headersSent) {
+        res.status(500).end();
+      }
     });
 
     stream.on('end', () => {
@@ -62,11 +105,13 @@ const generateAudio = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Text-to-Speech Error:', error);
-    return res.status(500).json({ 
-      message: "Error generating audio", 
-      error: error.message 
-    });
+    console.error('Text-to-Speech Error:', error.message);
+    if (!res.headersSent) {
+      return res.status(500).json({
+        message: "Error generating audio",
+        error: error.message,
+      });
+    }
   }
 };
 

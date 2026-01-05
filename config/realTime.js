@@ -7,7 +7,15 @@ const { entityModels } = require('./models');
 const { createClient, LiveTranscriptionEvents } = require("@deepgram/sdk");
 
 const deepgramApiKey = process.env.DEEPGRAM_API_KEY;
-const deepgram = createClient(deepgramApiKey);
+// #region agent log
+fetch('http://127.0.0.1:7242/ingest/1a9699bf-8eec-4467-94d3-a034cfdee89b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'realTime.js:10',message:'DEEPGRAM_API_KEY check',data:{hasKey:!!deepgramApiKey,keyLength:deepgramApiKey?.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+// #endregion
+let deepgram = null;
+if (deepgramApiKey) {
+  deepgram = createClient(deepgramApiKey);
+} else {
+  console.warn('DEEPGRAM_API_KEY not set - live transcription features will be disabled');
+}
 
 const channels = new Map();
 
@@ -403,6 +411,16 @@ async function handleTranscriptionEvent(type, data, socket) {
       return;
     }
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/1a9699bf-8eec-4467-94d3-a034cfdee89b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'realTime.js:handleTranscriptionEvent',message:'Transcription event received',data:{type,hasDeepgram:!!deepgram,channelName},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+
+    // Check if Deepgram is configured before attempting transcription
+    if (!deepgram && (type === 'start-transcription' || type === 'audio-chunk')) {
+      socket.emit('message', { type: 'error', message: 'Live transcription is not configured - DEEPGRAM_API_KEY is missing', timestamp: Date.now() });
+      return;
+    }
+
     if (type === 'start-transcription') {
       console.log('Transcription session started for channel:', channelName, 'by user:', userUuid, 'at:', new Date().toISOString());
 
@@ -643,6 +661,9 @@ async function handleCrudOperation(channelName, userUuid, type, payload, socket)
 }
 
 function createRealTimeServers(server, corsOptions) {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/1a9699bf-8eec-4467-94d3-a034cfdee89b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'realTime.js:createRealTimeServers',message:'Server initialization started',data:{deepgramConfigured:!!deepgram},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
   const io = new Server(server, {
     cors: corsOptions || { origin: '*' },
     pingInterval: 5000,
