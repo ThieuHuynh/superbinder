@@ -41,10 +41,10 @@ class SectionsPage {
    * @returns {Promise<string|null>} The ID of the created section or null
    */
   async createRootSection() {
-    const addButton = this.page.locator(this.selectors.addRootButton).first();
+    const addButton = this.page.locator('[title="Add Root Section"]').first();
     if (await addButton.isVisible({ timeout: 3000 }).catch(() => false)) {
       await addButton.click();
-      await this.page.waitForTimeout(500);
+      await this.page.waitForTimeout(1000);
       return this.getFirstSectionId();
     }
     return null;

@@ -1,6 +1,34 @@
 /**
  * Test Data Fixtures for E2E Tests
+ * Centralized test data, selectors, and configuration
  */
+
+/**
+ * Generate unique test identifier
+ * @returns {string}
+ */
+const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+
+/**
+ * Generate unique channel/binder name
+ * @param {string} prefix - Prefix for the name
+ * @returns {string}
+ */
+const generateChannelName = (prefix = 'test-') => prefix + generateId();
+
+/**
+ * Generate unique section name
+ * @param {string} prefix - Prefix for the section name
+ * @returns {string}
+ */
+const generateSectionName = (prefix = 'Section ') => prefix + Date.now();
+
+/**
+ * Generate unique goal text
+ * @param {string} prefix - Prefix for the goal text
+ * @returns {string}
+ */
+const generateGoalText = (prefix = 'Goal ') => prefix + Date.now();
 
 module.exports = {
   // Section test data
@@ -19,6 +47,17 @@ module.exports = {
     },
   },
 
+  // Goals test data
+  goals: {
+    sample: [
+      'Complete project documentation',
+      'Review pull requests',
+      'Update test coverage',
+    ],
+    testGoal: 'Test Goal',
+    longGoal: 'This is a very long goal text that should wrap properly in the UI and be fully visible to users',
+  },
+
   // User test data
   users: {
     primary: {
@@ -28,6 +67,20 @@ module.exports = {
     secondary: {
       displayName: 'Other User',
       channelPrefix: 'collab-test-',
+    },
+    goals: {
+      displayName: 'Goals Test User',
+    },
+    sections: {
+      displayName: 'Sections Test User',
+    },
+  },
+
+  // Binder test data
+  binders: {
+    testBinder: {
+      name: generateChannelName('test-binder-'),
+      displayName: 'Test User',
     },
   },
 
@@ -41,61 +94,9 @@ module.exports = {
     animation: 5000,
   },
 
-  // Selectors for common elements
-  selectors: {
-    // Section tree
-    treeNode: '.tree-node',
-    sectionTreeViewer: '.section-tree-viewer',
-    treeContainer: '.tree-container',
-
-    // Buttons
-    addRootSectionButton: '[title="Add Root Section"], button:has(.pi-plus)',
-    addChildSectionButton: 'button:has(.pi-plus)',
-    editButton: 'button:has(.pi-pencil)',
-    deleteButton: 'button:has(.pi-trash)',
-    uploadButton: 'button:has(.pi-upload)',
-    renderButton: 'button:has(.pi-eye)',
-
-    // Expand/collapse
-    expandToggle: '.expand-collapse',
-    caretRight: '.pi-caret-right',
-    caretDown: '.pi-caret-down',
-
-    // Checkbox
-    checkbox: '.checkbox',
-    checkboxChecked: '.checkbox svg',
-
-    // Input fields
-    editInput: 'input[id^="edit-"]',
-    renameInput: 'input[placeholder*="Rename"]',
-
-    // Navigation
-    sectionsTab: 'text=Sections, button:has-text("Sections")',
-
-    // Session setup
-    channelInput: 'input[placeholder*="channel" i], input[name="channelName"]',
-    displayNameInput: 'input[placeholder*="name" i], input[name="displayName"]',
-    joinButton: 'button:has-text("Join"), button[type="submit"]',
-
-    // Action buttons container
-    actionButtons: '.action-buttons',
-
-    // Text elements
-    sectionName: '.truncate, span:not(:has(*))',
-  },
-
-  /**
-   * Generate unique test identifiers
-   */
-  generateId: () => Date.now().toString(36) + Math.random().toString(36).substr(2),
-
-  /**
-   * Generate unique channel name
-   */
-  generateChannelName: (prefix = 'test-') => prefix + Date.now(),
-
-  /**
-   * Generate unique section name
-   */
-  generateSectionName: (prefix = 'Section ') => prefix + Date.now(),
+  // Helper functions
+  generateId,
+  generateChannelName,
+  generateSectionName,
+  generateGoalText,
 };

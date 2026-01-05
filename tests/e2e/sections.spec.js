@@ -1,325 +1,213 @@
 // @ts-check
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures/base-fixtures');
+const { generateBinderName, TEST_USERS, TIMEOUTS } = require('./helpers/test-helpers');
+const { generateSectionName } = require('./fixtures/test-data');
 
 /**
- * Browser Automation Tests for Section CRUD Operations
- * Tests Create, Edit, and Delete sections in the UI
+ * Section CRUD Operations Tests
+ * Refactored to use Page Object Model and fixtures
  */
 
-test.describe('Section CRUD Operations', () => {
-  // Test configuration
-  const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-  const testDisplayName = 'Section Test User';
-
-  test.beforeEach(async ({ page }) => {
-    const testChannelName = 'section-test-' + generateId();
-    
-    // Navigate to binder page
-    await page.goto('/binder');
-    await page.waitForLoadState('networkidle');
-    
-    // Fill in session setup form
-    const displayNameInput = page.locator('input[placeholder*="name" i]').first();
-    const binderNameInput = page.locator('input[placeholder*="Binder" i]').first();
-    
-    if (await displayNameInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await displayNameInput.fill(testDisplayName);
-    }
-    
-    if (await binderNameInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await binderNameInput.fill(testChannelName);
-    }
-    
-    // Click join button
-    const joinButton = page.locator('button:has-text("Join")').first();
-    if (await joinButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await joinButton.click();
-      await page.waitForTimeout(2000);
-    }
-    
-    // Navigate to Sections tab
-    const sectionsTab = page.locator('button:has-text("Sections")').first();
-    if (await sectionsTab.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await sectionsTab.click();
-      await page.waitForTimeout(500);
-    }
+test.describe('Sections - Create Operations', () => {
+  test.beforeEach(async ({ binderPage, sectionsPage }) => {
+    const binderName = generateBinderName('section-create');
+    await binderPage.createBinder(TEST_USERS.sections.displayName, binderName);
+    await sectionsPage.navigateToSections();
   });
 
-  test.describe('Create Section', () => {
-    test('should create a new root section', async ({ page }) => {
-      // Find and click the "Add Root Section" button (pi-plus icon in header)
-      const addSectionButton = page.locator('[title="Add Root Section"]').first();
-      
-      if (await addSectionButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await addSectionButton.click();
-        await page.waitForTimeout(500);
-        
-        // Verify section was created - look for tree-node
-        const newSection = page.locator('.tree-node').first();
-        const isVisible = await newSection.isVisible({ timeout: 5000 }).catch(() => false);
-        expect(isVisible).toBe(true);
-      }
-    });
-
-    test('should create a nested child section', async ({ page }) => {
-      // First create a parent section
-      const addRootButton = page.locator('[title="Add Root Section"]').first();
-      if (await addRootButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await addRootButton.click();
-        await page.waitForTimeout(1000);
-      }
-
-      // Find the section and click its add child button (pi-plus within the tree node)
-      const sectionNode = page.locator('.tree-node').first();
-      if (await sectionNode.isVisible({ timeout: 3000 }).catch(() => false)) {
-        // Hover to reveal action buttons
-        await sectionNode.hover();
-        await page.waitForTimeout(300);
-        
-        // Click the add section button within the node
-        const addChildButton = sectionNode.locator('button:has(.pi-plus)').first();
-        if (await addChildButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-          await addChildButton.click();
-          await page.waitForTimeout(1000);
-          
-          // Click expand toggle to show children (look for caret-right to expand)
-          const expandRight = page.locator('.tree-node').first().locator('.pi-caret-right').first();
-          if (await expandRight.isVisible({ timeout: 1000 }).catch(() => false)) {
-            await expandRight.click();
-            await page.waitForTimeout(500);
-          }
-          
-          // Wait for child sections to appear
-          await page.waitForTimeout(500);
-          
-          const allSections = page.locator('.tree-node');
-          const count = await allSections.count();
-          
-          // Either we have more than 1 visible section, or the add worked (child exists but collapsed)
-          // The test passes if we successfully clicked add child without errors
-          expect(count).toBeGreaterThanOrEqual(1);
-        }
-      }
-    });
+  test('should create a new root section', async ({ sectionsPage, page }) => {
+    await sectionsPage.createRootSection();
+    
+    const sectionCount = await sectionsPage.getSectionCount();
+    expect(sectionCount).toBeGreaterThan(0);
   });
 
-  test.describe('Edit Section', () => {
-    test('should rename a section', async ({ page }) => {
-      const newSectionName = 'Renamed Section ' + Date.now();
-      
-      // Create a section first
-      const addSectionButton = page.locator('[title="Add Root Section"]').first();
-      if (await addSectionButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await addSectionButton.click();
-        await page.waitForTimeout(500);
-      }
+  test('should create a nested child section', async ({ sectionsPage, page }) => {
+    // First create a parent section
+    await sectionsPage.createRootSection();
+    await page.waitForTimeout(TIMEOUTS.LONG);
 
-      // Find section and click edit button (pi-pencil)
-      const sectionNode = page.locator('.tree-node').first();
-      if (await sectionNode.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await sectionNode.hover();
-        
-        const editButton = sectionNode.locator('button:has(.pi-pencil)').first();
-        if (await editButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-          await editButton.click();
-          await page.waitForTimeout(300);
-          
-          // Find the input field and type new name
-          const editInput = page.locator('input[id^="edit-"]').first();
-          if (await editInput.isVisible({ timeout: 2000 }).catch(() => false)) {
-            await editInput.clear();
-            await editInput.fill(newSectionName);
-            await editInput.press('Enter');
-            
-            await page.waitForTimeout(500);
-            
-            // Verify the name was changed
-            const renamedSection = page.locator(`.tree-node:has-text("${newSectionName}")`);
-            const isRenamed = await renamedSection.isVisible({ timeout: 5000 }).catch(() => false);
-            expect(isRenamed).toBe(true);
-          }
-        }
-      }
-    });
+    // Create a child section
+    await sectionsPage.createChildSection();
+    await page.waitForTimeout(TIMEOUTS.LONG);
 
-    test('should show edit input on pencil click', async ({ page }) => {
-      // Create a section first
-      const addSectionButton = page.locator('[title="Add Root Section"]').first();
-      if (await addSectionButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await addSectionButton.click();
-        await page.waitForTimeout(500);
-      }
-
-      // Find section and click edit button
-      const sectionNode = page.locator('.tree-node').first();
-      if (await sectionNode.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await sectionNode.hover();
-        const editButton = sectionNode.locator('button:has(.pi-pencil)').first();
-        if (await editButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-          await editButton.click();
-          await page.waitForTimeout(300);
-          
-          // Verify edit input appears
-          const editInput = page.locator('input[id^="edit-"]').first();
-          const isInputVisible = await editInput.isVisible({ timeout: 2000 }).catch(() => false);
-          expect(isInputVisible).toBe(true);
-        }
-      }
-    });
-  });
-
-  test.describe('Delete Section', () => {
-    test('should delete a section', async ({ page }) => {
-      // Create a section first
-      const addSectionButton = page.locator('[title="Add Root Section"]').first();
-      if (await addSectionButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await addSectionButton.click();
-        await page.waitForTimeout(500);
-      }
-
-      // Count initial sections
-      const initialCount = await page.locator('.tree-node').count();
-
-      // Find section and click delete button (pi-trash)
-      const sectionNode = page.locator('.tree-node').first();
-      if (await sectionNode.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await sectionNode.hover();
-        
-        const deleteButton = sectionNode.locator('button:has(.pi-trash)').first();
-        if (await deleteButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-          await deleteButton.click();
-          await page.waitForTimeout(500);
-          
-          // Verify section was deleted
-          const finalCount = await page.locator('.tree-node').count();
-          expect(finalCount).toBeLessThan(initialCount);
-        }
-      }
-    });
-
-    test('should show delete button on hover', async ({ page }) => {
-      // Create a section first
-      const addSectionButton = page.locator('[title="Add Root Section"]').first();
-      if (await addSectionButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await addSectionButton.click();
-        await page.waitForTimeout(500);
-      }
-
-      // Find section and hover
-      const sectionNode = page.locator('.tree-node').first();
-      if (await sectionNode.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await sectionNode.hover();
-        
-        // Verify delete button is visible
-        const deleteButton = sectionNode.locator('button:has(.pi-trash)').first();
-        const isVisible = await deleteButton.isVisible({ timeout: 2000 }).catch(() => false);
-        expect(isVisible).toBe(true);
-      }
-    });
-  });
-
-  test.describe('Section Interactions', () => {
-    test('should toggle checkbox selection', async ({ page }) => {
-      // Create a section
-      const addSectionButton = page.locator('[title="Add Root Section"]').first();
-      if (await addSectionButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await addSectionButton.click();
-        await page.waitForTimeout(500);
-      }
-
-      // Find checkbox in section
-      const sectionNode = page.locator('.tree-node').first();
-      if (await sectionNode.isVisible({ timeout: 3000 }).catch(() => false)) {
-        const checkbox = sectionNode.locator('.checkbox').first();
-        if (await checkbox.isVisible({ timeout: 2000 }).catch(() => false)) {
-          // Click to select
-          await checkbox.click();
-          await page.waitForTimeout(300);
-          
-          // Verify selected state (has checkmark svg)
-          const isSelected = await checkbox.locator('svg').isVisible().catch(() => false);
-          expect(isSelected).toBe(true);
-          
-          // Click again to deselect
-          await checkbox.click();
-          await page.waitForTimeout(300);
-          
-          // Verify deselected
-          const isDeselected = !(await checkbox.locator('svg').isVisible().catch(() => false));
-          expect(isDeselected).toBe(true);
-        }
-      }
-    });
-
-    test('should show action buttons on hover', async ({ page }) => {
-      // Create a section
-      const addSectionButton = page.locator('[title="Add Root Section"]').first();
-      if (await addSectionButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await addSectionButton.click();
-        await page.waitForTimeout(500);
-      }
-
-      // Find section and hover
-      const sectionNode = page.locator('.tree-node').first();
-      if (await sectionNode.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await sectionNode.hover();
-        
-        // Verify action buttons appear
-        const editButton = sectionNode.locator('button:has(.pi-pencil)').first();
-        const deleteButton = sectionNode.locator('button:has(.pi-trash)').first();
-        
-        const hasEdit = await editButton.isVisible({ timeout: 2000 }).catch(() => false);
-        const hasDelete = await deleteButton.isVisible({ timeout: 2000 }).catch(() => false);
-        
-        expect(hasEdit && hasDelete).toBe(true);
-      }
-    });
+    // The test passes if we successfully clicked add child without errors
+    // Child may be collapsed, so we just verify parent still exists
+    const sectionCount = await sectionsPage.getSectionCount();
+    expect(sectionCount).toBeGreaterThanOrEqual(1);
   });
 });
 
-test.describe('Section Additional Tests', () => {
-  const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+test.describe('Sections - Edit Operations', () => {
+  test.beforeEach(async ({ binderPage, sectionsPage }) => {
+    const binderName = generateBinderName('section-edit');
+    await binderPage.createBinder(TEST_USERS.sections.displayName, binderName);
+    await sectionsPage.navigateToSections();
+  });
 
-  /**
-   * Helper to setup a binder and navigate to sections
-   */
-  async function setupBinderAndSections(page, binderName) {
-    await page.goto('/binder');
-    await page.waitForLoadState('networkidle');
+  test('should rename a section', async ({ sectionsPage }) => {
+    const newSectionName = generateSectionName('Renamed Section ');
+    
+    // Create a section first
+    await sectionsPage.createRootSection();
+    await sectionsPage.waitForSectionsToLoad();
 
-    const displayNameInput = page.locator('input[placeholder*="name" i]').first();
-    const binderNameInput = page.locator('input[placeholder*="Binder" i]').first();
+    // Rename it
+    const success = await sectionsPage.renameSection(newSectionName);
+    expect(success).toBe(true);
 
-    if (await displayNameInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await displayNameInput.fill('Test User');
+    // Verify the name was changed
+    expect(await sectionsPage.sectionExists(newSectionName)).toBe(true);
+  });
+
+  test('should show edit input on pencil click', async ({ sectionsPage, page }) => {
+    // Create a section
+    await sectionsPage.createRootSection();
+    await sectionsPage.waitForSectionsToLoad();
+
+    // Find section and click edit button
+    const sectionNode = page.locator('.tree-node').first();
+    if (await sectionNode.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await sectionNode.hover();
+      const editButton = sectionNode.locator('button:has(.pi-pencil)').first();
+      if (await editButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await editButton.click();
+        await page.waitForTimeout(TIMEOUTS.SHORT);
+        
+        // Verify edit input appears
+        const editInput = page.locator('input[id^="edit-"]').first();
+        expect(await editInput.isVisible({ timeout: 2000 })).toBe(true);
+      }
     }
-    if (await binderNameInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await binderNameInput.fill(binderName);
+  });
+});
+
+test.describe('Sections - Delete Operations', () => {
+  test.beforeEach(async ({ binderPage, sectionsPage }) => {
+    const binderName = generateBinderName('section-delete');
+    await binderPage.createBinder(TEST_USERS.sections.displayName, binderName);
+    await sectionsPage.navigateToSections();
+  });
+
+  test('should delete a section', async ({ sectionsPage }) => {
+    // Create a section
+    await sectionsPage.createRootSection();
+    await sectionsPage.waitForSectionsToLoad();
+
+    const initialCount = await sectionsPage.getSectionCount();
+
+    // Delete it
+    const success = await sectionsPage.deleteSection();
+    expect(success).toBe(true);
+
+    // Verify section was deleted
+    const finalCount = await sectionsPage.getSectionCount();
+    expect(finalCount).toBeLessThan(initialCount);
+  });
+
+  test('should show delete button on hover', async ({ sectionsPage, page }) => {
+    // Create a section
+    await sectionsPage.createRootSection();
+    await sectionsPage.waitForSectionsToLoad();
+
+    // Find section and hover
+    const sectionNode = page.locator('.tree-node').first();
+    if (await sectionNode.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await sectionNode.hover();
+      
+      // Verify delete button is visible
+      const deleteButton = sectionNode.locator('button:has(.pi-trash)').first();
+      expect(await deleteButton.isVisible({ timeout: 2000 })).toBe(true);
+    }
+  });
+
+  test('should delete all sections', async ({ sectionsPage }) => {
+    // Create multiple sections
+    await sectionsPage.createRootSection();
+    await sectionsPage.createRootSection();
+    await sectionsPage.createRootSection();
+    await sectionsPage.waitForSectionsToLoad();
+
+    const initialCount = await sectionsPage.getSectionCount();
+    expect(initialCount).toBeGreaterThanOrEqual(3);
+
+    // Delete all sections
+    while (await sectionsPage.getSectionCount() > 0) {
+      await sectionsPage.deleteSection();
+      await sectionsPage.page.waitForTimeout(TIMEOUTS.MEDIUM);
     }
 
-    const joinButton = page.locator('button:has-text("Join")').first();
-    if (await joinButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await joinButton.click();
-      await page.waitForTimeout(2000);
-    }
+    const finalCount = await sectionsPage.getSectionCount();
+    expect(finalCount).toBe(0);
+  });
+});
 
-    const sectionsTab = page.locator('button:has-text("Sections")').first();
-    if (await sectionsTab.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await sectionsTab.click();
-      await page.waitForTimeout(500);
-    }
-  }
+test.describe('Sections - UI Interactions', () => {
+  test.beforeEach(async ({ binderPage, sectionsPage }) => {
+    const binderName = generateBinderName('section-ui');
+    await binderPage.createBinder(TEST_USERS.sections.displayName, binderName);
+    await sectionsPage.navigateToSections();
+  });
 
-  test('should handle empty section name gracefully', async ({ page }) => {
-    const binderName = 'empty-name-test-' + generateId();
-    await setupBinderAndSections(page, binderName);
+  test('should toggle checkbox selection', async ({ sectionsPage, page }) => {
+    // Create a section
+    await sectionsPage.createRootSection();
+    await sectionsPage.waitForSectionsToLoad();
+
+    const sectionNode = page.locator('.tree-node').first();
+    if (await sectionNode.isVisible({ timeout: 3000 }).catch(() => false)) {
+      const checkbox = sectionNode.locator('.checkbox').first();
+      if (await checkbox.isVisible({ timeout: 2000 }).catch(() => false)) {
+        // Click to select
+        await sectionsPage.toggleCheckbox();
+        await page.waitForTimeout(TIMEOUTS.SHORT);
+        
+        // Verify selected state
+        const isSelected = await sectionsPage.isSelected();
+        expect(isSelected).toBe(true);
+        
+        // Click again to deselect
+        await sectionsPage.toggleCheckbox();
+        await page.waitForTimeout(TIMEOUTS.SHORT);
+        
+        // Verify deselected
+        const isDeselected = !(await sectionsPage.isSelected());
+        expect(isDeselected).toBe(true);
+      }
+    }
+  });
+
+  test('should show action buttons on hover', async ({ sectionsPage, page }) => {
+    // Create a section
+    await sectionsPage.createRootSection();
+    await sectionsPage.waitForSectionsToLoad();
+
+    // Find section and hover
+    const sectionNode = page.locator('.tree-node').first();
+    if (await sectionNode.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await sectionNode.hover();
+      
+      // Verify action buttons appear
+      const editButton = sectionNode.locator('button:has(.pi-pencil)').first();
+      const deleteButton = sectionNode.locator('button:has(.pi-trash)').first();
+      
+      const hasEdit = await editButton.isVisible({ timeout: 2000 }).catch(() => false);
+      const hasDelete = await deleteButton.isVisible({ timeout: 2000 }).catch(() => false);
+      
+      expect(hasEdit && hasDelete).toBe(true);
+    }
+  });
+});
+
+test.describe('Sections - Advanced Features', () => {
+  test('should handle empty section name gracefully', async ({ binderPage, sectionsPage, page }) => {
+    const binderName = generateBinderName('empty-name-test');
+    await binderPage.createBinder(TEST_USERS.sections.displayName, binderName);
+    await sectionsPage.navigateToSections();
 
     // Create a section
-    const addSectionButton = page.locator('[title="Add Root Section"]').first();
-    if (await addSectionButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await addSectionButton.click();
-      await page.waitForTimeout(500);
-    }
+    await sectionsPage.createRootSection();
+    await sectionsPage.waitForSectionsToLoad();
 
     // Try to rename with empty string
     const sectionNode = page.locator('.tree-node').first();
@@ -328,14 +216,14 @@ test.describe('Section Additional Tests', () => {
       const editButton = sectionNode.locator('button:has(.pi-pencil)').first();
       if (await editButton.isVisible({ timeout: 2000 }).catch(() => false)) {
         await editButton.click();
-        await page.waitForTimeout(300);
+        await page.waitForTimeout(TIMEOUTS.SHORT);
 
         const editInput = page.locator('input[id^="edit-"]').first();
         if (await editInput.isVisible({ timeout: 2000 }).catch(() => false)) {
           await editInput.clear();
           await editInput.fill('');
           await editInput.press('Enter');
-          await page.waitForTimeout(300);
+          await page.waitForTimeout(TIMEOUTS.SHORT);
 
           // Section should still exist with some name (validation should prevent empty)
           const sectionExists = await page.locator('.tree-node').first().isVisible().catch(() => false);
@@ -345,51 +233,69 @@ test.describe('Section Additional Tests', () => {
     }
   });
 
-  test('should persist sections after page reload', async ({ page }) => {
-    const binderName = 'persist-test-' + generateId();
-    const uniqueSectionName = 'Persistent Section ' + Date.now();
+  test('should persist sections after page reload', async ({ binderPage, sectionsPage, page }) => {
+    const binderName = generateBinderName('persist-test');
+    const uniqueSectionName = generateSectionName('Persistent Section ');
 
-    await setupBinderAndSections(page, binderName);
+    await binderPage.createBinder(TEST_USERS.sections.displayName, binderName);
+    await sectionsPage.navigateToSections();
 
     // Create and name a section
-    const addSectionButton = page.locator('[title="Add Root Section"]').first();
-    if (await addSectionButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await addSectionButton.click();
-      await page.waitForTimeout(500);
-
-      const sectionNode = page.locator('.tree-node').first();
-      if (await sectionNode.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await sectionNode.hover();
-        const editButton = sectionNode.locator('button:has(.pi-pencil)').first();
-        if (await editButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-          await editButton.click();
-          await page.waitForTimeout(300);
-
-          const editInput = page.locator('input[id^="edit-"]').first();
-          if (await editInput.isVisible({ timeout: 2000 }).catch(() => false)) {
-            await editInput.fill(uniqueSectionName);
-            await editInput.press('Enter');
-            await page.waitForTimeout(1000);
-          }
-        }
-      }
-    }
+    await sectionsPage.createRootSection();
+    await sectionsPage.waitForSectionsToLoad();
+    await sectionsPage.renameSection(uniqueSectionName);
 
     // Reload the page
     await page.reload();
     await page.waitForLoadState('networkidle');
 
     // Rejoin the same binder
-    await setupBinderAndSections(page, binderName);
+    await binderPage.gotoBinderByName(binderName);
+    const displayInput = page.locator('input[placeholder*="name" i]').first();
+    if (await displayInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await displayInput.fill(TEST_USERS.sections.displayName);
+      await binderPage.clickJoin();
+    }
+    await sectionsPage.navigateToSections();
 
-    // Verify section still exists (depends on backend persistence)
-    await page.waitForTimeout(1000);
-    const persistedSection = page.locator(`.tree-node:has-text("${uniqueSectionName}")`);
-    const exists = await persistedSection.isVisible({ timeout: 5000 }).catch(() => false);
+    // Verify section persistence (depends on backend)
+    await page.waitForTimeout(TIMEOUTS.LONG);
+    const exists = await sectionsPage.sectionExists(uniqueSectionName);
     
-    // Log result - persistence depends on backend being available and configured
+    // Log result - persistence depends on backend being available
     console.log(`Section persistence test: section ${exists ? 'found' : 'not found'}`);
+    
     // This assertion is soft - we just verify the test runs without error
     expect(true).toBe(true);
+  });
+
+  test('should handle multiple section operations in sequence', async ({ binderPage, sectionsPage }) => {
+    const binderName = generateBinderName('multi-op-test');
+    await binderPage.createBinder(TEST_USERS.sections.displayName, binderName);
+    await sectionsPage.navigateToSections();
+
+    // Create multiple sections
+    await sectionsPage.createRootSection();
+    await sectionsPage.createRootSection();
+    await sectionsPage.createRootSection();
+    await sectionsPage.waitForSectionsToLoad();
+
+    const initialCount = await sectionsPage.getSectionCount();
+    expect(initialCount).toBeGreaterThanOrEqual(3);
+
+    // Rename first section
+    const newName = generateSectionName('Renamed ');
+    await sectionsPage.renameSection(newName);
+
+    // Delete second section
+    const sections = await sectionsPage.page.locator('.tree-node').all();
+    if (sections.length > 1) {
+      await sectionsPage.deleteSection('.tree-node:nth-child(2)');
+    }
+
+    // Verify operations worked
+    const finalCount = await sectionsPage.getSectionCount();
+    expect(finalCount).toBeLessThan(initialCount);
+    expect(await sectionsPage.sectionExists(newName)).toBe(true);
   });
 });
